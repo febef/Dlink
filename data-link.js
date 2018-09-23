@@ -73,7 +73,9 @@ Array.prototype.diff = function(a, prop){
     : this.filter(function(it){return a.filter(function(ai){return it === ai;}) <= 0;});
 };
 
+///////////////////////////////////////////////////////////////////////////////
 ////////////////////////// DATA LINK Object ///////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 var DataLink = function(){
 
@@ -105,20 +107,21 @@ DataLink.prototype.gnps = function(node, directive){
   for(i=0; i<node.attributes.length; i++){
     attr = node.attributes[i];
     if (attr.name[0]==='~')
-      if(attr.value ===""){
+      if(attr.value ==="" || attr.name === attr.value){
         if(attr.name.indexOf(':')>0){
           let attrspl = attr.split(':');
           prop[attrspl[0]] = attrspl.slice(1).join(':');
         }else
           prop['~'] = attr.name.slice(1);
       }else
-        prop[atrr.name.slice(1)] = attr.value;
+        prop[attr.name.slice(1)] = attr.value;
   }
 
   if (directive.mode==='a'){
      if(typeof prop['~'] === 'undefined') prop['~~'] = prop['~'];
      prop['~'] = node.getAttribute('*' + directive.name);
-     if(typeof prop['~~'] !== 'undefined' && typeof prop['~'] === 'undefined') prop['~'] = prop['~~'];
+     if(typeof prop['~~'] !== 'undefined' && typeof prop['~'] === 'undefined')
+       prop['~'] = prop['~~'];
   }
 
   return prop;
@@ -127,6 +130,7 @@ DataLink.prototype.gnps = function(node, directive){
 DataLink.prototype.makeDefaultDirectives = function(){
   var gsp = this.gsp.bind(this);
   var gnps =  this.gnps.bind(this);
+
   // Model
   this.makeNewDirective('model', function(node, prop, model) {
   // model="ref"
@@ -134,26 +138,62 @@ DataLink.prototype.makeDefaultDirectives = function(){
     if (typeof gsp(prop) === 'undefined')
       gsp(prop, null ,{});
 
-    return {recursive: true, model: gsp(prop, model)};
+    return {recursive: true, model: gsp(prop)};
 
   }, -1, 'model.set');
-
 
   //onclick pathfunction
   this.makeNewDirective('onclick', function(node, prop, model){
     var prop = prop['~'].split('(');
-    
+
     node.onclick = function(){
       if (!node.disabled){
 
         return (prop.length>1)
-          ? gsp(prop[0],model, prop[1].split(')')[0].split(',').replace(/\s/g, ' ')) 
+          ? gsp(prop[0],model, prop[1].split(')')[0])//.split(',').replace(/\s/g, ' '))
           : gsp(prop[0], model);
       }
     };
     return {recursive: true, model: model};
   }, 8, 'event.onclick');
+  //sattr
+  this.makeNewDirective('sattr', function(node, prop, model) {
+  // sattr="porpname:ref"
 
+    var prop = prop['~'].split(':');
+    let attrname = prop[0];
+    prop = prop[1];
+
+    var submodel = model;
+
+    /*if (typeof  gsp(prop, submodel) === 'undefined' || node.getAttribute(attrname))
+       gsp(prop, submodel, node.getAttribute(attrname));
+    else */
+    if (typeof gsp(prop, submodel) === 'string')
+      node.setAttribute(attrname, gsp(prop, submodel));
+    else
+      node.setAttribute(artname, gsp(prop, submodel));
+
+    var watcher = function(submodel, prop) {
+      submodel.watch(prop, function(prop, oldVal, newVal) {
+        node.setAttribute(attrname, newVal);
+        return newVal;
+      });
+    };
+
+    if (prop[0]==='#'){
+      submodel = gsp(prop.split('.').slice(0,-1).join('.'));
+      prop = prop.split('.').slice(-1)[0];
+    }else if(prop.indexOf('.')>0){
+      let steps = prop.split('.');
+      for(let i=0; i<steps.length-1;i++)
+        submodel= submodel[steps[i]];
+      prop = steps.slice(-1)[0];
+    }
+    watcher(submodel, prop);
+
+    return {recursive: true, model: model};
+  }, 5, 'content.link');
   //Bring
   this.makeNewDirective('bring', function(node, prop, model) {
   // bring="ref"
@@ -161,9 +201,12 @@ DataLink.prototype.makeDefaultDirectives = function(){
     var prop = prop['~'];
     var submodel = model;
 
-    if (typeof  gsp(prop, submodel) === 'undefined' || node.innerHTML.length>0)
-       gsp(prop, submodel, node.innerHTML);
-    else if (typeof gsp(prop, submodel) === 'string')
+    /*
+    /getif (typeof  gsp(prop, submodel) === 'undefined' || node.innerHTML.length>0)
+      gsp(prop, submodel, node.innerHTML);
+    else
+    */
+    if (typeof gsp(prop, submodel) === 'string')
       node.innerHTML = gsp(prop, submodel);
     else
       node.innerHTML = JSON.stringify(gsp(prop, submodel));
@@ -188,43 +231,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
     watcher(submodel, prop);
 
     return {recursive: true, model: model};
-  }, 5, 'content.link');
-
-  //href
-  this.makeNewDirective('href', function(node, prop, model) {
-  // *href="url"
-
-    var prop = prop['~'];
-    var submodel = model;
-
-    if (typeof  gsp(prop, submodel) === 'undefined' || ( node.href && node.href.length>0))
-       gsp(prop, submodel, node.href);
-    else if (typeof gsp(prop, submodel) === 'string')
-      node.href = gsp(prop, submodel);
-    else
-      node.href = JSON.stringify(gsp(prop, submodel));
-
-    var watcher = function(submodel, prop) {
-      submodel.watch(prop, function(prop, oldVal, newVal) {
-        node.href = (typeof newVal !== 'string' ) ?
-          JSON.stringify(newVal) : newVal;
-        return newVal;
-      });
-    };
-
-    if (prop[0]==='#'){
-      submodel = gsp(prop.split('.').slice(0,-1).join('.'));
-      prop = prop.split('.').slice(-1)[0];
-    }else if(prop.indexOf('.')>0){
-      let steps = prop.split('.');
-      for(let i=0; i<steps.length-1;i++)
-        submodel= submodel[steps[i]];
-      prop = steps.slice(-1)[0];
-    }
-    watcher(submodel, prop);
-
-    return {recursive: true, model: model};
-  }, 5, 'content.link');
+  }, 4, 'content.link');
 
   //DLink
   this.makeNewDirective('dlink', function(node, prop, model) {
@@ -234,7 +241,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
 
     var _self = this;
     if (typeof gsp(prop, model) === 'undefined')
-      gsp(prop, model, node.value);
+      gsp(prop, model, "");
     var change = function() {
       gsp(prop, model, p());
     };
@@ -282,7 +289,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
                   );
               if (radiochecked.value === v) return v;
               if (typeof v !== 'undefined'){
-                radiochecked.checked=false;
+                radiochecked.checked = false;
                 radiochecked = $('input[type="radio"][value="'+v+'"]');
                 radiochecked.checked = true;
               }
@@ -318,7 +325,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
 
     if (node.addEventListener)
       node.addEventListener('DOMAttrModified', change, false);
-    else if (node.attachEvent) 
+    else if (node.attachEvent)
       node.attachEvent('onpropertychange', change);
     node.onchange = change;
     node.onclick = change;
@@ -349,7 +356,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
   }, 5, 'content.link');
 
   //For
-  this.makeNewDirective('for', function(node, prop, model) {
+  this.makeNewDirective('dlfor', function(node, prop, model) {
   // for="ref"
     var prop = prop['~'];
     var range = [], doom, _self = this;
@@ -403,7 +410,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
 
     var watcher = function(model, prop) {
       model.watch(prop, function(prop, oldVal, newVal){
-        if ( JSON.stringify(_self.clearModel(gsp(prop, model))) 
+        if ( JSON.stringify(_self.clearModel(gsp(prop, model)))
             !== JSON.stringify(_self.clearModel(newVal))) {
           p(newVal);
         }
@@ -424,12 +431,12 @@ DataLink.prototype.makeDefaultDirectives = function(){
     }
     watcher(model, prop);
 
-    return {recursive: false, model: lastmodel};
+    return {recursive: false, model:lastmodel};
   }, 5 , 'content.link');
 
   // cls
   this.makeNewDirective('cls', function(node, prop, model) {
-  // cls="-clss,clss,clss:ref"
+  // cls="-clss,clss,clss:ref;clss,-clss,clss:ortherref"
 
     var clss = [], sprop, listOfCls = prop['~'].split(';');
 
@@ -455,10 +462,10 @@ DataLink.prototype.makeDefaultDirectives = function(){
       listOfCls[i] = listOfCls[i].split(':');
       clss = listOfCls[i][0].split(',');
 
-      for (var j = 0; j < clss.length; j++) {
-        if (typeof gsp(listOfCls[i][1], model) ==='undefined')
-          gsp(listOfCls[i][1], model, false);
+      if (typeof gsp(listOfCls[i][1], model) ==='undefined')
+        gsp(listOfCls[i][1], model, false);
 
+      for (var j = 0; j < clss.length; j++) {
         p(clss[j], gsp(listOfCls[i][1], model));
 
         if (listOfCls[i][1][0]==='#'){
@@ -479,7 +486,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
 };
 
 // getter setter prop
-DataLink.prototype.gsp= function(prop, model, val){
+DataLink.prototype.gsp = function(prop, model, val){
 
   if (Array.isArray(prop))
     prop = prop[0];
@@ -543,7 +550,8 @@ DataLink.prototype.linker = function(node, model) {
   // si no se pauso la recursividad
   if (recursive)
     for(i=0; i<node.children.length; i++)
-      this.linker(node.children[i], model);
+      if (node.children[i].nodeName)
+        this.linker(node.children[i], model);
 
 };
 
