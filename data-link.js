@@ -146,12 +146,12 @@ DataLink.prototype.makeDefaultDirectives = function(){
   this.makeNewDirective('onclick', function(node, prop, model){
     var prop = prop['~'].split('(');
 
-    node.onclick = function(){
+    node.onclick = function(e){
       if (!node.disabled){
 
         return (prop.length>1)
-          ? gsp(prop[0],model, prop[1].split(')')[0])//.split(',').replace(/\s/g, ' '))
-          : gsp(prop[0], model);
+          ? gsp(prop[0],model, [e, prop[1].split(')')[0]])//.split(',').replace(/\s/g, ' '))
+          : gsp(prop[0], model, [e]);
       }
     };
     return {recursive: true, model: model};
@@ -172,7 +172,7 @@ DataLink.prototype.makeDefaultDirectives = function(){
     if (typeof gsp(prop, submodel) === 'string')
       node.setAttribute(attrname, gsp(prop, submodel));
     else
-      node.setAttribute(artname, gsp(prop, submodel));
+      node.setAttribute(attrname, gsp(prop, submodel));
 
     var watcher = function(submodel, prop) {
       submodel.watch(prop, function(prop, oldVal, newVal) {
@@ -368,14 +368,18 @@ DataLink.prototype.makeDefaultDirectives = function(){
     const getIterator = () =>  {
       let iterator;
       const ename = 'iteration';
-      const custom = (node.attributes[':']) ? node.attributes[":"].value : undefined ;
+      console.log(node.atributes);
+      const custom = (node.attributes[':item'])
+        ? node.attributes[':item'].value
+        : ((node.attributes[':']) ? node.attributes[':'] : undefined) ;
 
-      if ( custom  && custom.indexOf("{") >-1) {
+      if (custom) {
         const cspl = custom.split('{');
-        const attr = JSON.parse("{" + cspl[1]);
         iterator = document.createElement(cspl[0] || ename);
-        for (a in attr)
-          iterator.setAttribute(a , attr[a]);
+        if (custom.indexOf("{") >-1) {
+          const attr = JSON.parse("{" + cspl[1]);
+          for (a in attr) iterator.setAttribute(a , attr[a]);
+        }
       }else
         iterator = document.createElement(ename);
 
